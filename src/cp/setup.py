@@ -67,7 +67,7 @@ def add_port_config(port_config):
 
 
 def add_l2_forward(forward_configs):
-    l2_forward = bfrt.let_it_flow.pipe.SwitchIngress.random_forward
+    l2_forward = bfrt.conga.pipe.SwitchIngress.random_forward
     def generate_random_port_forward(dst_addr,port_begin,port_end):
         for i in range(port_begin,port_end+1):
             l2_forward.add_with_forward(dst_addr=dst_addr,port_index=i-port_begin,port=i)
@@ -82,7 +82,7 @@ def add_l2_forward(forward_configs):
             generate_random_port_forward(*config)
 
 def add_exact_forward(forward_configs):
-    l2_forward = bfrt.let_it_flow.pipe.SwitchIngress.exact_forward
+    l2_forward = bfrt.conga.pipe.SwitchIngress.exact_forward
     for config in forward_configs:
             l2_forward.add_with_forward(dst_addr=config[0],port=config[1])
     
