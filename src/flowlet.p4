@@ -175,8 +175,8 @@ control SwitchIngress(
 			meta.new_flowlet=check_new_flowlet.execute(meta.hash_val);
 
 			if(meta.new_flowlet==1){
-				bit<8> temp=get_last_path.execute(0)+1;
-				meta.port_index=temp[1:0];
+				bit<8> temp=get_last_path.execute(0);
+				meta.port_index=(temp+1)[1:0];
 				write_port_index.execute(meta.hash_val);
 			}else{
 				meta.port_index=read_port_index.execute(meta.hash_val)[1:0];
@@ -209,18 +209,6 @@ control SwitchEgress(
     in egress_intrinsic_metadata_from_parser_t eg_intr_md_from_prsr,
     inout egress_intrinsic_metadata_for_deparser_t eg_intr_md_for_dprsr,
     inout egress_intrinsic_metadata_for_output_port_t eg_intr_md_for_oport){
-
-
-	Register<bit<19>,bit<2>>(4) reg_queue_length;
-
-	RegisterAction<bit<19>,bit<2>,bit<19>>(reg_queue_length)
-	get_queue_length={
-		void apply(inout bit<19> data,out bit<19> length){
-			length=data;
-		}
-	};	
-
-
 
 	apply{
 
