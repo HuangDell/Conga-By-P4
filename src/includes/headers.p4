@@ -22,7 +22,7 @@ typedef bit<RANDOM_GEN_BIT_WIDTH> random_gen_bitwidth_t;
 typedef bit<48> mac_addr_t;
 typedef bit<32> ipv4_addr_t;
 typedef bit<32> timestamp_t;
-typedef bit<8> hash_t;
+typedef bit<1> hash_t;
 
 
 struct port_metadata_t {
@@ -193,10 +193,14 @@ struct metadata_t {
     port_metadata_t port_md;    // 8
     timestamp_t current_time;  // 32
     // timestamp_t time_gap;   // 32
-    hash_t hash_val;   // 16
+    // hash_t hash_val;   // 16
     bit<1> new_flowlet;
-    bit<2> port_index;
+    bit<2> min_link;
     bit<1> valid;
+    bit<32> counter0;
+    bit<32> counter1;
+    bit<32> counter2;
+    bit<32> counter3;
     ig_mirror1_h ig_mirror1;
     MirrorId_t mirror_session;
 }

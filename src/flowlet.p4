@@ -9,7 +9,7 @@
 #include "includes/headers.p4"
 #include "includes/parser.p4"
 
-#define FLOWLET_TABLE_SIZE 255
+#define FLOWLET_TABLE_SIZE 1
 
 const int MCAST_GRP_ID = 1; // for ARP
 const bit<10> MIRROR_SESSION_RDMA_ID_IG = 10w777;	// for mirror id
@@ -26,12 +26,11 @@ control SwitchIngress(
     inout ingress_intrinsic_metadata_for_deparser_t ig_intr_md_for_dprsr,
     inout ingress_intrinsic_metadata_for_tm_t ig_intr_md_for_tm){
 
-    Hash<hash_t>(HashAlgorithm_t.CRC8) flowlet_hash;
+    // Hash<hash_t>(HashAlgorithm_t.CRC8) flowlet_hash;
 
 	// flowlet table
 	Register<timestamp_t,hash_t>(FLOWLET_TABLE_SIZE) flowlet_time;
 	Register<bit<8>,hash_t>(FLOWLET_TABLE_SIZE) flowlet_port_index;
-	Register<bit<1>,hash_t>(FLOWLET_TABLE_SIZE) flowlet_valid;
 
 
 	RegisterAction<timestamp_t,hash_t,bit<1>>(flowlet_time)
@@ -39,7 +38,7 @@ control SwitchIngress(
 		void apply(inout timestamp_t data,out bit<1> new_flowlet){
 			new_flowlet=0;
 
-			if(meta.current_time-data>=FLOWLET_TIMEOUT || meta.valid==0){
+			if(meta.current_time-data>=FLOWLET_TIMEOUT){
 				new_flowlet=1;
 			}
 			data=meta.current_time;
@@ -60,13 +59,22 @@ control SwitchIngress(
 		}
 	};
 
-	RegisterAction<bit<1>,hash_t,bit<1>>(flowlet_valid)
-	check_valid={
-		void apply(inout bit<1> data,out bit<1> valid){
-			valid=data;
-			data=1;
+	Register<bit<32>,bit<2>>(4) path_counter;
+
+	RegisterAction<bit<32>,bit<2>,bit<32>>(path_counter)
+	read_path_counter={
+		void apply(inout bit<32> data,out bit<32> counter){
+			counter=data;
 		}
 	};
+
+	RegisterAction<bit<32>,bit<2>,bit<32>>(path_counter)
+	update_path_counter={
+		void apply(inout bit<32> data){
+			data=data|+|1;
+		}
+	};
+
 
 
 
@@ -81,7 +89,7 @@ control SwitchIngress(
 	table random_forward{
 		key = {
 			hdr.ethernet.dst_addr: exact;
-			meta.port_index: exact;
+			meta.min_link: exact;
 		}
 		actions = {
 			forward;
@@ -98,61 +106,22 @@ control SwitchIngress(
 		meta.ig_mirror1.mirrored = (bit<8>)IG_MIRROR_TYPE_1;
     }
 
-	// Register<bit<32>,bit<2>>(4) path_packet_counter;
+	action find_lowest_path(){
+		bit<32> min_value = meta.counter0;  
 
-
-	// RegisterAction<bit<32>,bit<2>,void>(path_packet_counter)
-	// update_path_count={
-	// 	void apply(inout bit<32> data){
-	// 		data=data|+|1;
-	// 	}
-	// };
-
-	// RegisterAction<bit<32>,bit<2>,bit<32>>(path_packet_counter)
-	// get_path_count={
-	// 	void apply(inout bit<32> data,out bit<32> count){
-	// 		count=data;
-	// 	}
-	// };
-
-
-
-
-
-	Register<bit<8>,bit<1>>(1) chosen_path;
-
-	RegisterAction<bit<8>,bit<1>,bit<8>>(chosen_path)
-	get_last_path={
-		void apply(inout bit<8> data,out bit<8> path){
-			path=data;
-			data=data|+|1
-		}
-	};
-
-	// Register<bit<32>,bit<1>>(1) flowlet_timeout;
-
-	// RegisterAction<bit<32>,bit<1>,bit<32>>(flowlet_timeout)
-	// get_flowlet_timeout={
-	// 	void apply(inout bit<32> data,out bit<32> rv){
-	// 		rv=data;
-	// 	}
-	// };
-
-
-
-	// table exact_forward {
-	// 	key = {
-	// 		hdr.ethernet.dst_addr: exact;
-	// 	}
-
-	// 	actions = {
-	// 		forward;
-	// 		@defaultonly miss;
-	// 	}
-	// 	const default_action = miss(0x1);
-	// }
-
-
+		if (meta.counter1 < min_value) {  
+			min_value = counter1;  
+			meta.min_link = 1;  
+		}  
+		if (meta.counter2 < min_value) {  
+			min_value = counter2;  
+			meta.min_link = 2;  
+		}  
+		if (meta.counter3 < min_value) {  
+			min_value = counter3;  
+			meta.min_link = 3;  
+		}  
+	}
 
 	apply {
 		if(hdr.ethernet.ether_type == (bit<16>) ether_type_t.ARP){
@@ -160,36 +129,38 @@ control SwitchIngress(
 			ig_intr_md_for_tm.mcast_grp_a = MCAST_GRP_ID;
 			ig_intr_md_for_tm.rid = 0;
 		} else { // non-arp packet	
-			// get current timestamp  
-			if(hdr.pfc.isValid()){
-				hdr.ethernet.dst_addr = 48w0x0180c2000001;
-			}
-			// meta.timeout = get_flowlet_timeout.execute(0);
-			meta.current_time=ig_intr_md.ingress_mac_tstamp[39:8];
-			meta.hash_val=flowlet_hash.get({hdr.ethernet.src_addr,hdr.ethernet.dst_addr,hdr.bth.destination_qp});
-
-
-
-			// check current transport link is valid
-			meta.valid=check_valid.execute(meta.hash_val);
-
-			meta.new_flowlet=check_new_flowlet.execute(meta.hash_val);
-
-			if(meta.new_flowlet==1){
-				bit<8> temp=get_last_path.execute(0);
-				meta.port_index=(temp+1)[1:0];
-				write_port_index.execute(meta.hash_val);
-			}else{
-				meta.port_index=read_port_index.execute(meta.hash_val)[1:0];
-			}
-
-			random_forward.apply();
 
 			if (hdr.bth.isValid()){ // if RDMA
+				if(hdr.pfc.isValid()){
+					hdr.ethernet.dst_addr = 48w0x0180c2000001;
+				}
+				// meta.timeout = get_flowlet_timeout.execute(0);
+				meta.current_time=ig_intr_md.ingress_mac_tstamp[39:8];
+				// meta.hash_val=flowlet_hash.get({hdr.ethernet.src_addr,hdr.ethernet.dst_addr,hdr.bth.destination_qp});
+
+
+				// check current transport link is valid
+				meta.valid=check_valid.execute(0);
+
+				meta.new_flowlet=check_new_flowlet.execute(0);
+				meta.min_link=read_port_index.execute(0)[1:0];
+
+
+				if(meta.new_flowlet==1){
+					meta.counter0=read_path_counter.execute(0);
+					meta.counter1=read_path_counter.execute(1);
+					meta.counter2=read_path_counter.execute(2);
+					meta.counter3=read_path_counter.execute(3);
+					find_lowest_path();
+					write_port_index.execute(meta.min_link);
+				}
+				update_path_counter.execute(meta.min_link);
+				random_forward.apply();
 				#ifdef IG_MIRRORING_ENABLED
 				mirror_to_collector(MIRROR_SESSION_RDMA_ID_IG); // ig_mirror all RDMA packets
 				#endif
-			}
+			}else
+				random_forward.apply();
 		}
 	}
 
