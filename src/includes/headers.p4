@@ -196,11 +196,11 @@ struct metadata_t {
     // hash_t hash_val;   // 16
     bit<1> new_flowlet;
     bit<2> min_link;
-    bit<1> valid;
-    bit<32> counter0;
-    bit<32> counter1;
-    bit<32> counter2;
-    bit<32> counter3;
+    // bit<32> counter0;
+    // bit<32> counter1;
+    // bit<32> counter2;
+    // bit<32> counter3;
+    bit<32> counter;
     ig_mirror1_h ig_mirror1;
     MirrorId_t mirror_session;
 }

@@ -55,7 +55,7 @@ control SwitchIngress(
 	RegisterAction<bit<8>,hash_t,bit<8>>(flowlet_port_index)
 	write_port_index={
 		void apply(inout bit<8> data){
-			data=(bit<8>)meta.port_index;
+			data=(bit<8>)meta.min_link;
 		}
 	};
 
@@ -67,6 +67,16 @@ control SwitchIngress(
 			counter=data;
 		}
 	};
+
+	RegisterAction<bit<32>,bit<2>,bit<1>>(path_counter)
+	cmp_path_counter={
+		void apply(inout bit<32> data,out bit<1> flag){
+			flag=0;
+			if(data<meta.counter)
+				flag=1;
+		}
+	};
+
 
 	RegisterAction<bit<32>,bit<2>,bit<32>>(path_counter)
 	update_path_counter={
@@ -95,6 +105,7 @@ control SwitchIngress(
 			forward;
 			@defaultonly miss;
 		}
+		size = 16;
 		const default_action = miss(0x1);
 	}
 
@@ -107,20 +118,6 @@ control SwitchIngress(
     }
 
 	action find_lowest_path(){
-		bit<32> min_value = meta.counter0;  
-
-		if (meta.counter1 < min_value) {  
-			min_value = counter1;  
-			meta.min_link = 1;  
-		}  
-		if (meta.counter2 < min_value) {  
-			min_value = counter2;  
-			meta.min_link = 2;  
-		}  
-		if (meta.counter3 < min_value) {  
-			min_value = counter3;  
-			meta.min_link = 3;  
-		}  
 	}
 
 	apply {
@@ -140,27 +137,40 @@ control SwitchIngress(
 
 
 				// check current transport link is valid
-				meta.valid=check_valid.execute(0);
 
 				meta.new_flowlet=check_new_flowlet.execute(0);
 				meta.min_link=read_port_index.execute(0)[1:0];
 
 
 				if(meta.new_flowlet==1){
-					meta.counter0=read_path_counter.execute(0);
-					meta.counter1=read_path_counter.execute(1);
+					meta.counter=read_path_counter.execute(0);
+/* 					meta.counter1=read_path_counter.execute(1);
 					meta.counter2=read_path_counter.execute(2);
-					meta.counter3=read_path_counter.execute(3);
-					find_lowest_path();
-					write_port_index.execute(meta.min_link);
+					meta.counter3=read_path_counter.execute(3); */
+					bit<1> flag;
+					flag=cmp_path_counter.execute(1);
+					if(flag==1){
+						meta.min_link=1;
+						meta.counter=read_path_counter.execute(1);
+					}
+					flag=cmp_path_counter.execute(2);
+					if(flag==1){
+						meta.min_link=2;
+						meta.counter=read_path_counter.execute(2);
+					}
+					flag=cmp_path_counter.execute(3);
+					if(flag==1){
+						meta.min_link=3;
+						meta.counter=read_path_counter.execute(3);
+					}
+					write_port_index.execute(0);
 				}
 				update_path_counter.execute(meta.min_link);
-				random_forward.apply();
 				#ifdef IG_MIRRORING_ENABLED
 				mirror_to_collector(MIRROR_SESSION_RDMA_ID_IG); // ig_mirror all RDMA packets
 				#endif
-			}else
-				random_forward.apply();
+			}
+			random_forward.apply();
 		}
 	}
 
