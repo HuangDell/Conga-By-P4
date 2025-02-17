@@ -177,7 +177,7 @@ control SwitchIngress(
 
 			if(meta.new_flowlet==1){
 				bit<8> temp=get_last_path.execute(0);
-				meta.port_index=(temp+1)[1:0];
+				meta.port_index=temp[1:0];
 				write_port_index.execute(meta.hash_val);
 			}else{
 				meta.port_index=read_port_index.execute(meta.hash_val)[1:0];
