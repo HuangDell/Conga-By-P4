@@ -125,7 +125,7 @@ control SwitchIngress(
 	get_last_path={
 		void apply(inout bit<8> data,out bit<8> path){
 			path=data;
-			data=data|+|1;
+			data=data+1;
 		}
 	};
 
